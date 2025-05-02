@@ -1,77 +1,78 @@
 import requests
 import random
-import hashlib
-import string
-from datetime import datetime, timedelta
 import os
+from datetime import datetime, timedelta
 from dotenv import load_dotenv
 
 load_dotenv()
 
-class WeatherRandom:
+class VortexRandom:
     def __init__(self):
-        self.api_key = "ff3784abc1684d3a663c744b3071c73d"
-        self.base_url = "https://api.openweathermap.org/data/2.5/weather"
-        self.cities = ["Tokyo", "London", "New York", "Paris", "Berlin", "Sydney", "Toronto", "Seoul", "Moscow", "Rome"]
+        self.api_key = os.getenv("OWM_API_KEY")
+        self.url = "https://api.openweathermap.org/data/2.5/weather"
+        self.cities = ["Tokyo", "London", "New York", "Paris", "Berlin"]
         self.cache = {}
-        self.cache_time = timedelta(minutes=2)
+        self.cache_expire = timedelta(minutes=2)
 
     def get_weather(self, city):
-        #Fetch weather data with basic caching.
+        """Get weather data for a city with caching"""
         now = datetime.now()
         if city in self.cache:
-            data, timestamp = self.cache[city]
-            if now - timestamp < self.cache_time:
+            data, time_cached = self.cache[city]
+            if now - time_cached < self.cache_expire:
                 return data
 
-        params = {
-            'q': city,
-            'appid': self.api_key,
-            'units': 'metric'
-        }
         try:
-            response = requests.get(self.base_url, params=params, timeout=5)
+            response = requests.get(self.url, params={
+                "q": city,
+                "appid": self.api_key,
+                "units": "metric"
+            }, timeout=5)
             response.raise_for_status()
             data = response.json()
             self.cache[city] = (data, now)
             return data
-        except Exception as e:
-            print(f"Failed to get weather for {city}: {e}")
+        except:
             return None
 
     def generate_seed(self):
-        #Generate a seed based on weather data.
-        chosen = random.sample(self.cities, 2)
-        combined = ""
-
-        for city in chosen:
-            weather = self.get_weather(city)
-            if weather:
-                temp = weather.get('main', {}).get('temp', 0)
-                humidity = weather.get('main', {}).get('humidity', 0)
-                combined += f"{city}{temp}{humidity}"
-
-        combined += datetime.now().strftime("%Y%m%d%H%M%S")
-        hash_val = hashlib.sha256(combined.encode()).hexdigest()
-        return int(hash_val[:8], 16)
+        """Simplified seed generation using weather data and time"""
+        # 1. Get real-world weather randomness
+        city = random.choice(self.cities)  # Pick one random city
+        weather = self.get_weather(city)
+        
+        # 2. Create seed from weather data (if available)
+        weather_seed = 0
+        if weather:
+            main = weather["main"]
+            weather_seed = sum([
+                int(main.get("temp", 0) * 100),
+                main.get("humidity", 0),
+                main.get("pressure", 0)
+            ])
+        
+        # 3. Add current time randomness
+        now = datetime.now()
+        time_seed = sum([
+            now.year, now.month, now.day,
+            now.hour, now.minute, now.second
+        ])
+        
+        # 4. Combine both sources
+        final_seed = weather_seed + time_seed
+        random.seed(final_seed)
+        return final_seed
 
     def random_number(self, min_val=0, max_val=1):
-        #Generate a random number based on weather.
-        seed = self.generate_seed()
-        random_value = (seed % 10000) / 10000  # Scale between 0 and 1
-        result = min_val + (max_val - min_val) * random_value
-        return int(result) if isinstance(min_val, int) else result
+        """Generate random number between min and max"""
+        self.generate_seed()  # Seed the random generator
+        if isinstance(min_val, int) and isinstance(max_val, int):
+            return random.randint(min_val, max_val)
+        return round(random.uniform(min_val, max_val), 4)
 
-# Example Usage
+# Example usage remains the same
 if __name__ == "__main__":
-    password = ""
-    for i in range(5):
-        wr = WeatherRandom()
-        index = wr.random_number(0, 52)
-        s = string.ascii_letters[index]
-
-        password += s
-
-    print(password)
-
-
+    wr = WeatherRandom()
+    print("Float between 0.0 and 1.0:", wr.random_number(0.0, 1.0))
+    print("Integer between 5 and 5:", wr.random_number(5, 5))
+    print("Integer between 10 and 100:", wr.random_number(10, 100))
