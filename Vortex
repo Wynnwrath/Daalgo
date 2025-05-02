@@ -1,0 +1,77 @@
+import requests
+import random
+import hashlib
+import string
+from datetime import datetime, timedelta
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
+
+class WeatherRandom:
+    def __init__(self):
+        self.api_key = "ff3784abc1684d3a663c744b3071c73d"
+        self.base_url = "https://api.openweathermap.org/data/2.5/weather"
+        self.cities = ["Tokyo", "London", "New York", "Paris", "Berlin", "Sydney", "Toronto", "Seoul", "Moscow", "Rome"]
+        self.cache = {}
+        self.cache_time = timedelta(minutes=2)
+
+    def get_weather(self, city):
+        #Fetch weather data with basic caching.
+        now = datetime.now()
+        if city in self.cache:
+            data, timestamp = self.cache[city]
+            if now - timestamp < self.cache_time:
+                return data
+
+        params = {
+            'q': city,
+            'appid': self.api_key,
+            'units': 'metric'
+        }
+        try:
+            response = requests.get(self.base_url, params=params, timeout=5)
+            response.raise_for_status()
+            data = response.json()
+            self.cache[city] = (data, now)
+            return data
+        except Exception as e:
+            print(f"Failed to get weather for {city}: {e}")
+            return None
+
+    def generate_seed(self):
+        #Generate a seed based on weather data.
+        chosen = random.sample(self.cities, 2)
+        combined = ""
+
+        for city in chosen:
+            weather = self.get_weather(city)
+            if weather:
+                temp = weather.get('main', {}).get('temp', 0)
+                humidity = weather.get('main', {}).get('humidity', 0)
+                combined += f"{city}{temp}{humidity}"
+
+        combined += datetime.now().strftime("%Y%m%d%H%M%S")
+        hash_val = hashlib.sha256(combined.encode()).hexdigest()
+        return int(hash_val[:8], 16)
+
+    def random_number(self, min_val=0, max_val=1):
+        #Generate a random number based on weather.
+        seed = self.generate_seed()
+        random_value = (seed % 10000) / 10000  # Scale between 0 and 1
+        result = min_val + (max_val - min_val) * random_value
+        return int(result) if isinstance(min_val, int) else result
+
+# Example Usage
+if __name__ == "__main__":
+    password = ""
+    for i in range(5):
+        wr = WeatherRandom()
+        index = wr.random_number(0, 52)
+        s = string.ascii_letters[index]
+
+        password += s
+
+    print(password)
+
+
