@@ -1,78 +1,104 @@
-import requests
-import random
-import os
-from datetime import datetime, timedelta
-from dotenv import load_dotenv
+import requests  
+import random   
+import os       
+from datetime import datetime, timedelta  
+from dotenv import load_dotenv 
 
 load_dotenv()
 
-class WeatherRandom:
+class VortexRandom:
     def __init__(self):
-        self.api_key = os.getenv("OWM_API_KEY")
-        self.url = "https://api.openweathermap.org/data/2.5/weather"
+        self.api_key = os.getenv("OWM_API_KEY")  # Get our secret API key
+        self.url = "https://api.openweathermap.org/data/2.5/weather"  # Weather API address
+        # List of cities we'll get weather data from
         self.cities = [
             "Tokyo", "London", "New York", "Paris", "Berlin",
             "Sydney", "Toronto", "Seoul", "Moscow", "Rome"
         ]
-        self.cache = {}
-        self.cache_expire = timedelta(minutes=2)
+        self.cache = {}  # use cache to avoid redundant api calls
+        self.cache_expire = timedelta(minutes=2)  # How long till we call again
 
     def get_weather(self, city):
-        now = datetime.now()
-
-        # Use cached data if it's still fresh
+        now = datetime.now()  # Get current time
+        
+        # First check if we have fresh cached data for this city
         if city in self.cache:
             cached_data, cached_time = self.cache[city]
+            # If data is still fresh, use the cached version
             if now - cached_time < self.cache_expire:
                 return cached_data
 
-        # Otherwise fetch from API
+        # If not fresh cached data, get new data from the API
         try:
+            # Make the API request
             response = requests.get(self.url, params={
-                "q": city,
-                "appid": self.api_key,
-                "units": "metric"
-            }, timeout=5)
+                "q": city,  # City name
+                "appid": self.api_key,  # Our API key
+                "units": "metric"  # Get temperatures in Celsius
+            }, timeout=5) 
+            
+            # Check for errors in the response
             response.raise_for_status()
+            
+            # Convert the response to Python dictionary
             data = response.json()
+            
+            # Save to cache for future use
             self.cache[city] = (data, now)
             return data
+            
         except Exception as e:
+            # If something goes wrong, print error and return nothing
             print(f"Error fetching weather for {city}: {e}")
             return None
 
     def generate_seed(self):
-        # Select 3 random cities
+        # Pick 3 random cities from our list
         selected_cities = random.sample(self.cities, 3)
-        seed = 0
+        seed = 0  # Start with empty seed
 
+        # Get weather data from each city and add to our seed
         for city in selected_cities:
             weather = self.get_weather(city)
             if weather:
-                main = weather.get("main", {})
-                temp = main.get("temp", 0)
-                humidity = main.get("humidity", 0)
-                pressure = main.get("pressure", 0)
+                main = weather.get("main", {})  # Get main weather data
+                temp = main.get("temp", 0)      # Temperature in Celsius
+                humidity = main.get("humidity", 0)  # Humidity percentage
+                pressure = main.get("pressure", 0)  # Atmospheric pressure
+                
+                # Add weather data to seed (Use x100 to keep decimals)
                 seed += int(temp * 100) + humidity + pressure
 
-        # Add time components for more randomness
+        # Add current date/time to make seed even more random
         now = datetime.now()
-        seed += now.year + now.month + now.day + now.hour + now.minute + now.second + now.microsecond
-
+        seed += now.year + now.month + now.day 
+        seed += now.hour + now.minute + now.second + now.microsecond
+        
         return seed
 
-    def random_float(self, min_val=0.0, max_val=1.0):
+    def random_number(self, min_val=0, max_val=1):
+        """Generate a random number between min_val and max_val"""
+        # First we create our unique seed based on weather and time
         seed = self.generate_seed()
-        normalized = (seed % 10000) / 10000  # Normalize to 0-1 range
-        return min_val + (max_val - min_val) * normalized
+        
+        # Convert seed to a number between 0 and 1
+        normalized = (seed % 10000) / 10000
+        
+        # Check if user wants an integer (whole number)
+        if isinstance(min_val, int) and isinstance(max_val, int):
+            # Return random integer between min and max (inclusive)
+            return int(min_val + (max_val + 1 - min_val) * normalized)
+        else:
+            # Return random decimal number between min and max
+            return min_val + (max_val - min_val) * normalized
 
-    def random_int(self, min_val=0, max_val=100):
-        return int(self.random_float(min_val, max_val + 1))  # +1 to include max_val
-
+# Example usage when running this file directly
 if __name__ == "__main__":
-    wr = WeatherRandom()
+    wr = VortexRandom()  # Create our weather random number generator
     
-    print("Random float between 0.0 and 1.0:", wr.random_float())
-    print("Random float between 1.5 and 3.5:", wr.random_float(1.5, 3.5))
-    print("Random integer between 1 and 10:", wr.random_int(1, 10))
-    print("Random integer between 50 and 100:", wr.random_int(50, 100))
+    # Get different types of random numbers
+    print("Default float between 0.0 and 1.0:", wr.random_number())
+    print("Float between 1.5 and 3.5:", wr.random_number(1.5, 3.5))
+    print("Integer between 1 and 10:", wr.random_number(1, 10))
+    print("Mixed input (1 to 10.5):", wr.random_number(1, 10.5))
+    print("Integer between 50 and 100:", wr.random_number(50, 100))
