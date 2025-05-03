@@ -6,22 +6,27 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-class VortexRandom:
+class WeatherRandom:
     def __init__(self):
         self.api_key = os.getenv("OWM_API_KEY")
         self.url = "https://api.openweathermap.org/data/2.5/weather"
-        self.cities = ["Tokyo", "London", "New York", "Paris", "Berlin"]
+        self.cities = [
+            "Tokyo", "London", "New York", "Paris", "Berlin",
+            "Sydney", "Toronto", "Seoul", "Moscow", "Rome"
+        ]
         self.cache = {}
         self.cache_expire = timedelta(minutes=2)
 
     def get_weather(self, city):
-        """Get weather data for a city with caching"""
         now = datetime.now()
-        if city in self.cache:
-            data, time_cached = self.cache[city]
-            if now - time_cached < self.cache_expire:
-                return data
 
+        # Use cached data if it's still fresh
+        if city in self.cache:
+            cached_data, cached_time = self.cache[city]
+            if now - cached_time < self.cache_expire:
+                return cached_data
+
+        # Otherwise fetch from API
         try:
             response = requests.get(self.url, params={
                 "q": city,
@@ -32,47 +37,42 @@ class VortexRandom:
             data = response.json()
             self.cache[city] = (data, now)
             return data
-        except:
+        except Exception as e:
+            print(f"Error fetching weather for {city}: {e}")
             return None
 
     def generate_seed(self):
-        """Simplified seed generation using weather data and time"""
-        # 1. Get real-world weather randomness
-        city = random.choice(self.cities)  # Pick one random city
-        weather = self.get_weather(city)
-        
-        # 2. Create seed from weather data (if available)
-        weather_seed = 0
-        if weather:
-            main = weather["main"]
-            weather_seed = sum([
-                int(main.get("temp", 0) * 100),
-                main.get("humidity", 0),
-                main.get("pressure", 0)
-            ])
-        
-        # 3. Add current time randomness
+        # Select 3 random cities
+        selected_cities = random.sample(self.cities, 3)
+        seed = 0
+
+        for city in selected_cities:
+            weather = self.get_weather(city)
+            if weather:
+                main = weather.get("main", {})
+                temp = main.get("temp", 0)
+                humidity = main.get("humidity", 0)
+                pressure = main.get("pressure", 0)
+                seed += int(temp * 100) + humidity + pressure
+
+        # Add time components for more randomness
         now = datetime.now()
-        time_seed = sum([
-            now.year, now.month, now.day,
-            now.hour, now.minute, now.second
-        ])
-        
-        # 4. Combine both sources
-        final_seed = weather_seed + time_seed
-        random.seed(final_seed)
-        return final_seed
+        seed += now.year + now.month + now.day + now.hour + now.minute + now.second + now.microsecond
 
-    def random_number(self, min_val=0, max_val=1):
-        """Generate random number between min and max"""
-        self.generate_seed()  # Seed the random generator
-        if isinstance(min_val, int) and isinstance(max_val, int):
-            return random.randint(min_val, max_val)
-        return round(random.uniform(min_val, max_val), 4)
+        return seed
 
-# Example usage remains the same
+    def random_float(self, min_val=0.0, max_val=1.0):
+        seed = self.generate_seed()
+        normalized = (seed % 10000) / 10000  # Normalize to 0-1 range
+        return min_val + (max_val - min_val) * normalized
+
+    def random_int(self, min_val=0, max_val=100):
+        return int(self.random_float(min_val, max_val + 1))  # +1 to include max_val
+
 if __name__ == "__main__":
     wr = WeatherRandom()
-    print("Float between 0.0 and 1.0:", wr.random_number(0.0, 1.0))
-    print("Integer between 5 and 5:", wr.random_number(5, 5))
-    print("Integer between 10 and 100:", wr.random_number(10, 100))
+    
+    print("Random float between 0.0 and 1.0:", wr.random_float())
+    print("Random float between 1.5 and 3.5:", wr.random_float(1.5, 3.5))
+    print("Random integer between 1 and 10:", wr.random_int(1, 10))
+    print("Random integer between 50 and 100:", wr.random_int(50, 100))
