@@ -89,19 +89,21 @@ class VortexRandom:
 
     def random_number(self, min_val=0, max_val=1):
         seed = self.generate_weather_seed()
-        range_span = max_val - min_val
+        entropy = int.from_bytes(os.urandom(4), 'big')
+
+        combined = (seed ^ entropy) * 31 + (seed % 97)
+        normalized = abs(combined % 1_000_000) / 1_000_000.0
 
         if isinstance(min_val, int) and isinstance(max_val, int):
-            # if both numbers are ints, return a random int
-            return min_val + secrets.randbelow((max_val + 1) - min_val)
+            return int(min_val + normalized * (max_val - min_val + 1))
         else:
-            # otherwise, return a random float
-            return min_val + range_span * secrets.randbits(32) / (2**32)
+            return min_val + (max_val - min_val) * normalized
+
 
 # Example.
 if __name__ == "__main__":
     vr = VortexRandom()
-    print("Secure integer between 0 and 1:", vr.random_number())
+    print("Secure integer between 0 and 1:", vr.random_number(0.0, 1.0))
     print("Secure float between 1.5 and 3.5", vr.random_number(1.5, 3.5))
     print("Secure float between 3.5 and 100.0:", vr.random_number(3.5, 100.0))
     print("Secure integer between 10 and 1000:", vr.random_number(10, 1000))
