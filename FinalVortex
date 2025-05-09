@@ -6,7 +6,7 @@ import secrets
 
 load_dotenv()
 
-class VortexRandomSecure:
+class VortexRandom:
     def __init__(self):
         self.api_key = os.getenv("OWM_API_KEY")
         self.url = "https://api.openweathermap.org/data/2.5/weather"
@@ -68,7 +68,7 @@ class VortexRandomSecure:
 
 # Example usage
 if __name__ == "__main__":
-    vr = VortexRandomSecure()
+    vr = VortexRandom()
     print("Secure float between 0.0 and 1.0:", vr.random_number())
     print("Secure float between 1.5 and 3.5:", vr.random_number(1.5, 3.5))
     print("Secure integer between 1 and 10:", vr.random_number(1, 10))
