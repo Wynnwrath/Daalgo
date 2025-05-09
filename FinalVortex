@@ -1,0 +1,75 @@
+import requests  
+import os       
+from datetime import datetime, timedelta, timezone  
+from dotenv import load_dotenv 
+import secrets
+
+load_dotenv()
+
+class VortexRandomSecure:
+    def __init__(self):
+        self.api_key = os.getenv("OWM_API_KEY")
+        self.url = "https://api.openweathermap.org/data/2.5/weather"
+        self.cities = [ 
+            "Tokyo", "London", "New York", "Paris", "Berlin",
+            "Sydney", "Toronto", "Seoul", "Moscow", "Rome"
+        ]
+        self.cache = {}
+        self.cache_expire = timedelta(minutes=2)
+
+    def get_weather(self, city):
+        now = datetime.now(timezone.utc)
+        if city in self.cache:
+            cached_data, cached_time = self.cache[city]
+            if now - cached_time < self.cache_expire:
+                return cached_data
+        try:
+            response = requests.get(self.url, params={
+                "q": city,
+                "appid": self.api_key,
+                "units": "metric"
+            }, timeout=5)
+            response.raise_for_status()
+            data = response.json()
+            self.cache[city] = (data, now)
+            return data
+        except:
+            return None  
+
+    def generate_weather_seed(self):
+        selected_cities = secrets.SystemRandom().sample(self.cities, 3)
+        seed = 0
+        valid_weather_found = False
+
+        for city in selected_cities:
+            weather = self.get_weather(city)
+            if weather:
+                valid_weather_found = True
+                main = weather.get("main", {})
+                temp = main.get("temp", 0)
+                humidity = main.get("humidity", 0)
+                pressure = main.get("pressure", 0)
+                seed += int(temp * 100) + humidity + pressure
+
+        now = datetime.now(timezone.utc)
+        seed += now.year + now.month + now.day
+        seed += now.hour + now.minute + now.second + now.microsecond
+
+        return seed if valid_weather_found else now.timestamp()
+
+    def random_number(self, min_val=0, max_val=1):
+        seed = self.generate_weather_seed()
+        range_span = max_val - min_val
+
+        if isinstance(min_val, int) and isinstance(max_val, int):
+            return min_val + secrets.randbelow((max_val + 1) - min_val)
+        else:
+            return min_val + range_span * secrets.randbits(32) / (2**32)
+
+# Example usage
+if __name__ == "__main__":
+    vr = VortexRandomSecure()
+    print("Secure float between 0.0 and 1.0:", vr.random_number())
+    print("Secure float between 1.5 and 3.5:", vr.random_number(1.5, 3.5))
+    print("Secure integer between 1 and 10:", vr.random_number(1, 10))
+    print("Secure integer between 10 and 1000:", vr.random_number(10, 1000))
