@@ -1,0 +1,107 @@
+import requests              # to get weather info from the internet
+import os                   # used to get stuff like API keys
+from datetime import datetime, timedelta, timezone  # for dealing with time
+from dotenv import load_dotenv  # lets us load the .env file
+import secrets              # better version of random, more secure (for cryptographic uses)
+import json                 # to read and write cache to a file
+
+load_dotenv()  # load the API key from .env file
+
+# This class will make random numbers using weather + time
+class VortexRandom:
+    def __init__(self):
+        self.api_key = os.getenv("OWM_API_KEY")  # get API key from env
+        self.url = "https://api.openweathermap.org/data/2.5/weather"  # weather API link
+        self.cities = [  # just a list of cities to pick from
+            "Tokyo", "London", "New York", "Paris", "Berlin",
+            "Sydney", "Toronto", "Seoul", "Moscow", "Rome"
+        ]
+        self.cache_file = "weather_cache.json"  # the cache file
+        self.cache_expire = timedelta(minutes=2)  # cache lasts 2 mins
+
+        # Load the cache from the file
+        self.cache = self.load_cache()
+
+    def load_cache(self):
+        try:
+            with open(self.cache_file, "r") as f:
+                cache_data = json.load(f)
+                # Convert stored timestamps back to datetime
+                return {city: (data, datetime.fromisoformat(ts)) for city, (data, ts) in cache_data.items()}
+        except:
+            return {}
+
+    def save_cache(self):
+        # Save the cache data to the file
+        with open(self.cache_file, "w") as f:
+            json.dump(
+                {city: (data, ts.isoformat()) for city, (data, ts) in self.cache.items()},
+                f, indent=2
+            )
+
+    def get_weather(self, city):
+        now = datetime.now(timezone.utc)  # get current time
+        if city in self.cache:
+            cached_data, cached_time = self.cache[city]
+            if now - cached_time < self.cache_expire:
+                return cached_data  # return cached data if it's still fresh
+
+        try:
+            # ask the API for weather data
+            response = requests.get(self.url, params={
+                "q": city,
+                "appid": self.api_key,
+                "units": "metric"
+            }, timeout=5)
+            response.raise_for_status()
+            data = response.json()
+            # Store new data in cache and save it to the file
+            self.cache[city] = (data, now)
+            self.save_cache()
+            return data
+        except Exception as e:
+            print(f"Failed to get weather for {city}: {e}")
+            return None  # if there's a problem (like no internet), just return nothing
+
+    def generate_weather_seed(self):
+        selected_cities = secrets.SystemRandom().sample(self.cities, 3)  # pick 3 random cities
+        seed = 0
+        valid_weather_found = False
+
+        for city in selected_cities:
+            weather = self.get_weather(city)
+            if weather:
+                valid_weather_found = True
+                main = weather.get("main", {})
+                temp = main.get("temp", 0)
+                humidity = main.get("humidity", 0)
+                pressure = main.get("pressure", 0)
+                # use weather values to help build a random seed
+                seed += int(temp * 100) + humidity + pressure
+    
+        now = datetime.now(timezone.utc)
+        # also add parts of the current time to the seed
+        seed += now.year + now.month + now.day
+        seed += now.hour + now.minute + now.second + now.microsecond
+
+        # if we didn't get any weather data, just use the current time
+        return seed if valid_weather_found else now.timestamp()
+
+    def random_number(self, min_val=0, max_val=1):
+        seed = self.generate_weather_seed()
+        range_span = max_val - min_val
+
+        if isinstance(min_val, int) and isinstance(max_val, int):
+            # if both numbers are ints, return a random int
+            return min_val + secrets.randbelow((max_val + 1) - min_val)
+        else:
+            # otherwise, return a random float
+            return min_val + range_span * secrets.randbits(32) / (2**32)
+
+# Example.
+if __name__ == "__main__":
+    vr = VortexRandom()
+    print("Secure integer between 0 and 1:", vr.random_number())
+    print("Secure float between 1.5 and 3.5", vr.random_number(1.5, 3.5))
+    print("Secure float between 3.5 and 100.0:", vr.random_number(3.5, 100.0))
+    print("Secure integer between 10 and 1000:", vr.random_number(10, 1000))
